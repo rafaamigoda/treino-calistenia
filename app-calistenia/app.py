@@ -387,38 +387,4 @@ else:
             """, unsafe_allow_html=True)
             
         with m2:
-            st.markdown(f"""
-            <div class="stat-card">
-                <div class="stat-number">{total_exercicios}</div>
-                <div class="stat-label">Exercícios Concluídos</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.write("")
-        st.subheader("📋 Log Registrado por Exercício")
-        
-        c.execute("SELECT data, dia_treino, exercicio, series, reps, carga FROM conclusoes_exercicios ORDER BY id DESC")
-        linhas = c.fetchall()
-        
-        if linhas:
-            for r in linhas:
-                st.markdown(f"""
-                <div class="log-card">
-                    <span style="color: #08D9D6; font-weight: bold;">📅 {r[0]} | {r[1]}</span><br>
-                    <span style="font-size: 1.1rem; color: #FFF;">✔️ <b>{r[2]}</b></span> — {r[3]} séries × {r[4]} reps <span style="color: #94A3B8;">({r[5]})</span>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("Nenhum registro no banco de dados ainda. Faça seu treino e marque o checklist!")
-
-        conn.close()
-
-    # ABA 3: GUIA DOS EXERCÍCIOS
-    with aba_selecionada[2]:
-        st.subheader("📖 Guia Muscular & Mecânica dos Exercícios")
-        st.markdown("""
-        * **Flexão com Pés Elevados (Declinada):** Coloca o peitoral superior (porção clavicular) e deltoide anterior no ponto de maior tensão.
-        * **Flexão Diamante:** Enfatiza a porção interna (miolo do peito) e força do tríceps.
-        * **Flexão Pike:** Trabalha a cabeça lateral e anterior dos ombros para criar largura de ombros.
-        * **Elevação de Pernas Deitado:** Ao elevar o quadril no topo do movimento, isola perfeitamente a linha do "V" infra-abdominal.
-        * **Remada Invertida na Mesa:** Equilibra a
+            st.markdown
