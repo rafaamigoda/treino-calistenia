@@ -69,15 +69,16 @@ st.markdown("""
         font-weight: 400;
     }
 
-    .login-container {
+    .login-box {
         max-width: 420px;
-        margin: 40px auto;
+        margin: 30px auto;
         background: rgba(18, 18, 24, 0.85);
         border: 1px solid rgba(255, 0, 60, 0.5);
         border-radius: 16px;
         padding: 30px;
         backdrop-filter: blur(12px);
         box-shadow: 0 0 35px rgba(255, 0, 60, 0.25);
+        text-align: center;
     }
 
     .exercise-card {
@@ -139,7 +140,6 @@ st.markdown("""
         margin-bottom: 12px;
     }
 
-    /* Estilização de botões e inputs em vermelho */
     .stButton>button {
         background: linear-gradient(90deg, #FF003C, #CC0031) !important;
         color: white !important;
@@ -165,7 +165,7 @@ if not st.session_state["autenticado"]:
 
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
-        st.markdown('<div class="login-container">', unsafe_allow_html=True)
+        st.markdown('<div class="login-box">', unsafe_allow_html=True)
         st.markdown("### 🔑 Digite sua senha de acesso:")
         st.text_input("Senha VIP:", type="password", key="input_senha", label_visibility="collapsed")
         
