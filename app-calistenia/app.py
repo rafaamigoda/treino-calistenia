@@ -3,7 +3,7 @@ import sqlite3
 import datetime
 import os
 
-VIDEO_DIR = "videos"
+VIDEO_DIR = "app-calistenia/videos"
 
 # Page Config
 st.set_page_config(
