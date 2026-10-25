@@ -3,7 +3,7 @@ import sqlite3
 import datetime
 import os
 
-VIDEO_DIR = "app-calistenia/videos"
+VIDEO_DIR = "videos"
 
 # Page Config
 st.set_page_config(
@@ -229,15 +229,12 @@ else:
     # Navegação por Abas
     aba_selecionada = st.tabs(["🏋️ TREINO DO DIA", "📈 RELATÓRIO & ESTATÍSTICAS", "📖 GUIA DOS EXERCÍCIOS"])
 
-    # Diretório exato da pasta de vídeos no OneDrive Desktop
-    VIDEO_DIR = r"C:\Users\rafae\OneDrive\Desktop\Calistenia"
-
     def exibir_video_ou_link(video_filename, link_yt):
         video_path = os.path.join(VIDEO_DIR, video_filename)
         if os.path.exists(video_path):
             st.video(video_path)
         else:
-            st.info(f"💡 Vídeo local ({video_filename}) não encontrado na pasta Calistenia. [Assistir HD no YouTube]({link_yt})")
+            st.info(f"💡 Vídeo local ({video_filename}) não encontrado na pasta do repositório. [Assistir HD no YouTube]({link_yt})")
 
     # ABA 1: TREINO DO DIA
     with aba_selecionada[0]:
@@ -424,5 +421,4 @@ else:
         * **Flexão Diamante:** Enfatiza a porção interna (miolo do peito) e força do tríceps.
         * **Flexão Pike:** Trabalha a cabeça lateral e anterior dos ombros para criar largura de ombros.
         * **Elevação de Pernas Deitado:** Ao elevar o quadril no topo do movimento, isola perfeitamente a linha do "V" infra-abdominal.
-        * **Remada Invertida na Mesa:** Equilibra a força da musculatura dorsal e projeta o peitoral para a frente.
-        """)
+        * **Remada Invertida na Mesa:** Equilibra a
