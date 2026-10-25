@@ -7,7 +7,7 @@ VIDEO_DIR = "app-calistenia/videos"
 
 # Page Config
 st.set_page_config(
-    page_title="CALISTHENICS PRO — Dark Cyber Performance",
+    page_title="VERSÃO RAFINHA 5.0 — Dark Cyber Performance",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="collapsed"
