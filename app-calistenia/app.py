@@ -5,7 +5,6 @@ import os
 
 VIDEO_DIR = "app-calistenia/videos"
 
-# Page Config
 st.set_page_config(
     page_title="VERSÃO RAFINHA 5.0 — Dark Red Performance",
     page_icon="⚡",
@@ -13,10 +12,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Definir a Senha VIP de Acesso
 SENHA_CORRETA = "151123"
 
-# Controle de Autenticação via Session State
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
@@ -26,7 +23,6 @@ def verificar_senha():
     else:
         st.error("Senha incorreta. Acesso negado! 🔒")
 
-# Estilização CSS Dark & Vermelho Sangue
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800;900&family=Inter:wght@300;400;600;700&display=swap');
@@ -71,7 +67,7 @@ st.markdown("""
 
     .login-box {
         max-width: 420px;
-        margin: 30px auto;
+        margin: 40px auto;
         background: rgba(18, 18, 24, 0.85);
         border: 1px solid rgba(255, 0, 60, 0.5);
         border-radius: 16px;
@@ -89,10 +85,6 @@ st.markdown("""
         padding: 20px;
         margin-bottom: 20px;
         backdrop-filter: blur(8px);
-    }
-    .exercise-card:hover {
-        border-color: #FF003C;
-        box-shadow: 0 0 20px rgba(255, 0, 60, 0.2);
     }
     .ex-title {
         font-family: 'Orbitron', sans-serif;
@@ -154,7 +146,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# TELA DE LOGIN PRIVADA
 if not st.session_state["autenticado"]:
     st.markdown("""
     <div class="hero-header">
@@ -175,7 +166,6 @@ if not st.session_state["autenticado"]:
                 st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-# CONTEÚDO DO APLICATIVO
 else:
     def init_db():
         conn = sqlite3.connect("treino_database.db")
@@ -232,7 +222,6 @@ else:
         conn.commit()
         conn.close()
 
-    # Top Hero Section com Versão Rafinha 5.0
     st.markdown("""
     <div class="hero-header">
         <div class="hero-title">⚡ VERSÃO RAFINHA 5.0</div>
@@ -249,7 +238,6 @@ else:
         else:
             st.info(f"💡 Vídeo local ({video_filename}) carregando da pasta. [Assistir HD no YouTube]({link_yt})")
 
-    # ABA 1: TREINO DO DIA
     with aba_selecionada[0]:
         dia_selecionado = st.selectbox(
             "SELECIONE A SESSÃO DE HOJE:",
@@ -373,7 +361,6 @@ else:
                 registrar_exercicio_concluido("Treino D", "Flexão Pés Elevados", 4, 10, "Corporal")
                 st.success("Registrado!")
 
-    # ABA 2: RELATÓRIO & ESTATÍSTICAS
     with aba_selecionada[1]:
         st.subheader("📊 Painel de Performance e Histórico")
         
@@ -422,7 +409,6 @@ else:
 
         conn.close()
 
-    # ABA 3: GUIA DOS EXERCÍCIOS
     with aba_selecionada[2]:
         st.subheader("📖 Guia Muscular & Mecânica dos Exercícios")
         st.markdown("""
