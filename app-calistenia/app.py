@@ -3,6 +3,8 @@ import sqlite3
 import datetime
 import os
 
+VIDEO_DIR = "videos"
+
 # Page Config
 st.set_page_config(
     page_title="CALISTHENICS PRO — Dark Cyber Performance",
