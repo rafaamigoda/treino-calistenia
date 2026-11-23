@@ -1,0 +1,5 @@
+PAINEL FINANCEIRO PRO v2 (CORRIGIDO)
+
+1. Extraia a pasta 'painel_fluxo_pro_v2' no seu PC.
+2. Coloque suas imagens dos bancos dentro da pasta 'icones/'.
+3. Dê dois cliques em 'iniciar.bat' para abrir o painel no navegador.

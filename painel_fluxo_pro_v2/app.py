@@ -1,0 +1,549 @@
+import base64
+import datetime
+import os
+import sqlite3
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+st.set_page_config(
+    page_title="Painel Financeiro Pro",
+    page_icon="💠",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+DB_FILE = "fluxo_pro.db"
+ICON_DIR = "icones"
+
+BANCOS_INFO = {
+    "PicPay": {"emoji": "🟢", "arquivo": "picpay"},
+    "Nubank": {"emoji": "🟣", "arquivo": "nubank"},
+    "Inter": {"emoji": "🟧", "arquivo": "inter"},
+    "Bradesco": {"emoji": "🔴", "arquivo": "bradesco"},
+    "Itaú": {"emoji": "🟠", "arquivo": "itau"},
+    "Mercado Pago": {"emoji": "🔵", "arquivo": "mercadopago"},
+    "Caixa": {"emoji": "🔷", "arquivo": "caixa"},
+    "Santander": {"emoji": "🔺", "arquivo": "santander"},
+    "Dinheiro / Pix": {"emoji": "💵", "arquivo": "pix"},
+    "Outro Banco": {"emoji": "🏦", "arquivo": "outro"},
+}
+
+CATEGORIAS = [
+    "💳 Cartão de Crédito",
+    "👨‍👩‍👦 Acertos / Família",
+    "📚 Cursos & Estudos",
+    "🎯 Metas & Reservas",
+    "🍔 Alimentação",
+    "🏠 Casa & Contas",
+    "💻 PC & Eletrônicos",
+    "📦 Outros",
+]
+
+MESES_PT = {
+    1: "Janeiro",
+    2: "Fevereiro",
+    3: "Março",
+    4: "Abril",
+    5: "Maio",
+    6: "Junho",
+    7: "Julho",
+    8: "Agosto",
+    9: "Setembro",
+    10: "Outubro",
+    11: "Novembro",
+    12: "Dezembro",
+}
+
+st.markdown(
+    """
+    <style>
+        .block-container {
+            padding-top: 1.4rem;
+            padding-bottom: 2rem;
+        }
+        div[data-testid="stMetric"] {
+            background-color: #111827;
+            border: 1px solid rgba(56, 189, 248, 0.32);
+            border-radius: 12px;
+            padding: 14px 18px;
+        }
+        div[data-testid="stMetricLabel"] > div {
+            color: #94A3B8;
+            font-size: 0.85rem;
+        }
+        div[data-testid="stMetricValue"] > div {
+            color: #38BDF8;
+            font-weight: 700;
+        }
+        .stButton > button, .stFormSubmitButton > button {
+            border-radius: 8px;
+            border: 1px solid #38BDF8;
+            font-weight: 600;
+        }
+        section[data-testid="stSidebar"] {
+            background-color: #0D1322;
+            border-right: 1px solid rgba(56, 189, 248, 0.18);
+        }
+        .banco-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        .banco-badge img {
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            object-fit: cover;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+def buscar_caminho_icone(banco_nome):
+    info = BANCOS_INFO.get(banco_nome, {"arquivo": "outro"})
+    base = info["arquivo"]
+    for ext in [".png", ".jpg", ".jpeg", ".webp"]:
+        caminho = os.path.join(ICON_DIR, base + ext)
+        if os.path.exists(caminho):
+            return caminho
+    return None
+
+
+def render_banco_html(banco_nome):
+    caminho = buscar_caminho_icone(banco_nome)
+    emoji = BANCOS_INFO.get(banco_nome, {"emoji": "🏦"})["emoji"]
+    if caminho:
+        ext = os.path.splitext(caminho)[1].lower().replace(".", "")
+        if ext == "jpg":
+            ext = "jpeg"
+        with open(caminho, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+        return f'<span class="banco-badge"><img src="data:image/{ext};base64,{b64}"/> {banco_nome}</span>'
+    return f'<span class="banco-badge">{emoji} {banco_nome}</span>'
+
+
+def get_conn():
+    return sqlite3.connect(DB_FILE, check_same_thread=False)
+
+
+def init_db():
+    c = get_conn()
+    cur = c.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS config (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            salario REAL NOT NULL
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS lancamentos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            data_lancamento TEXT NOT NULL,
+            banco TEXT NOT NULL,
+            categoria TEXT NOT NULL,
+            nome TEXT NOT NULL,
+            quantidade INTEGER NOT NULL DEFAULT 1,
+            valor REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Pendente'
+        )
+        """
+    )
+    cur.execute("INSERT OR IGNORE INTO config (id, salario) VALUES (1, 1800.0)")
+    cur.execute("SELECT COUNT(*) FROM lancamentos")
+    if cur.fetchone()[0] == 0:
+        hoje = datetime.date.today().isoformat()
+        cur.executemany(
+            """
+            INSERT INTO lancamentos (data_lancamento, banco, categoria, nome, quantidade, valor, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (hoje, "PicPay", "💳 Cartão de Crédito", "Fatura PicPay", 1, 1500.0, "Pendente"),
+                (hoje, "Dinheiro / Pix", "🍔 Alimentação", "Alimentação e lanches", 1, 150.0, "Pago"),
+            ],
+        )
+    c.commit()
+    c.close()
+
+
+def get_salario():
+    c = get_conn()
+    cur = c.cursor()
+    cur.execute("SELECT salario FROM config WHERE id = 1")
+    row = cur.fetchone()
+    c.close()
+    return float(row[0]) if row else 1800.0
+
+
+def set_salario(valor):
+    c = get_conn()
+    cur = c.cursor()
+    cur.execute("UPDATE config SET salario = ? WHERE id = 1", (float(valor),))
+    c.commit()
+    c.close()
+
+
+def carregar_lancamentos():
+    c = get_conn()
+    df = pd.read_sql_query(
+        """
+        SELECT id, data_lancamento, banco, categoria, nome, quantidade, valor, status
+        FROM lancamentos
+        ORDER BY data_lancamento DESC, id DESC
+        """,
+        c,
+    )
+    c.close()
+    if df.empty:
+        return pd.DataFrame(
+            columns=["id", "data_lancamento", "banco", "categoria", "nome", "quantidade", "valor", "total", "status", "ano", "mes", "mes_nome"]
+        )
+    df["data_dt"] = pd.to_datetime(df["data_lancamento"], errors="coerce")
+    df["ano"] = df["data_dt"].dt.year.fillna(datetime.date.today().year).astype(int)
+    df["mes"] = df["data_dt"].dt.month.fillna(datetime.date.today().month).astype(int)
+    df["mes_nome"] = df["mes"].map(MESES_PT)
+    df["total"] = df["quantidade"] * df["valor"]
+    return df
+
+
+def adicionar_lancamento(data_str, banco, categoria, nome, quantidade, valor, status):
+    c = get_conn()
+    cur = c.cursor()
+    cur.execute(
+        """
+        INSERT INTO lancamentos (data_lancamento, banco, categoria, nome, quantidade, valor, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (data_str, banco, categoria, nome.strip(), int(quantidade), float(valor), status),
+    )
+    c.commit()
+    c.close()
+
+
+def alternar_status(item_id, status_atual):
+    novo = "Pago" if status_atual == "Pendente" else "Pendente"
+    c = get_conn()
+    cur = c.cursor()
+    cur.execute("UPDATE lancamentos SET status = ? WHERE id = ?", (novo, int(item_id)))
+    c.commit()
+    c.close()
+
+
+def excluir_lancamento(item_id):
+    c = get_conn()
+    cur = c.cursor()
+    cur.execute("DELETE FROM lancamentos WHERE id = ?", (int(item_id),))
+    c.commit()
+    c.close()
+
+
+def brl(v):
+    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+init_db()
+
+if "aba_ativa" not in st.session_state:
+    st.session_state["aba_ativa"] = "lancamentos"
+
+with st.sidebar:
+    st.markdown("## 💠 Controle Pro")
+    st.caption("Salário líquido (VT já descontado)")
+    salario_atual = get_salario()
+    novo_salario = st.number_input(
+        "Salário líquido mensal (R$)",
+        min_value=0.0,
+        step=50.0,
+        value=salario_atual,
+        format="%.2f",
+    )
+    if novo_salario != salario_atual:
+        set_salario(novo_salario)
+        st.rerun()
+
+    st.markdown("---")
+    if st.button("📋 Lançamentos & Bancos", width="stretch", type="primary" if st.session_state["aba_ativa"] == "lancamentos" else "secondary"):
+        st.session_state["aba_ativa"] = "lancamentos"
+        st.rerun()
+    if st.button("📊 Gráficos Completos", width="stretch", type="primary" if st.session_state["aba_ativa"] == "graficos" else "secondary"):
+        st.session_state["aba_ativa"] = "graficos"
+        st.rerun()
+    if st.button("📅 Histórico por Mês e Ano", width="stretch", type="primary" if st.session_state["aba_ativa"] == "historico" else "secondary"):
+        st.session_state["aba_ativa"] = "historico"
+        st.rerun()
+
+    st.markdown("---")
+    icones_detectados = sum(1 for b in BANCOS_INFO if buscar_caminho_icone(b) is not None)
+    st.caption(f"🖼️ Ícones na pasta `icones/`: {icones_detectados} encontrados")
+    st.caption("💾 Salvamento automático em `fluxo_pro.db`")
+
+df_all = carregar_lancamentos()
+hoje = datetime.date.today()
+
+if st.session_state["aba_ativa"] == "lancamentos":
+    st.markdown("## 📋 Lançamentos, Cartões e Classificações")
+
+    anos_disp = sorted(list(set(df_all["ano"].tolist() + [hoje.year])), reverse=True)
+    f1, f2, _ = st.columns([1.2, 1.5, 3])
+    ano_sel = f1.selectbox("Ano", anos_disp, index=0)
+    mes_opcoes = ["Todos os meses"] + [MESES_PT[m] for m in range(1, 13)]
+    mes_sel_nome = f2.selectbox("Mês", mes_opcoes, index=hoje.month)
+
+    df_filtrado = df_all[df_all["ano"] == ano_sel].copy()
+    if mes_sel_nome != "Todos os meses":
+        df_filtrado = df_filtrado[df_filtrado["mes_nome"] == mes_sel_nome]
+
+    total_gastos = float(df_filtrado["total"].sum()) if not df_filtrado.empty else 0.0
+    total_cartoes = float(df_filtrado[df_filtrado["categoria"] == "💳 Cartão de Crédito"]["total"].sum()) if not df_filtrado.empty else 0.0
+    sobra = novo_salario - total_gastos
+    pct_sobra = (sobra / novo_salario * 100) if novo_salario > 0 else 0.0
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Salário Líquido", brl(novo_salario))
+    m2.metric("Gastos no Período", brl(total_gastos))
+    m3.metric("Dívida em Cartões", brl(total_cartoes))
+    m4.metric("Sobra Livre", f"{brl(sobra)} ({pct_sobra:.1f}%)")
+
+    st.divider()
+
+    st.markdown("### ➕ Novo Lançamento")
+    with st.form("form_novo", clear_on_submit=True):
+        c1, c2, c3, c4 = st.columns([1.3, 1.5, 1.7, 2.2])
+        data_inp = c1.date_input("Data", value=hoje, format="DD/MM/YYYY")
+        banco_inp = c2.selectbox("Banco / Carteira", list(BANCOS_INFO.keys()), format_func=lambda k: f"{BANCOS_INFO[k]['emoji']} {k}")
+        cat_inp = c3.selectbox("Classificação", CATEGORIAS)
+        nome_inp = c4.text_input("Nome do gasto", placeholder="Digite o nome...")
+
+        c5, c6, c7, c8 = st.columns([1, 1.4, 1.4, 1.4])
+        qtd_inp = c5.number_input("Qtd", min_value=1, step=1, value=1)
+        val_inp = c6.number_input("Valor (R$)", min_value=0.0, step=10.0, value=0.0, format="%.2f")
+        status_inp = c7.selectbox("Situação", ["Pendente", "Pago"])
+        with c8:
+            st.write("")
+            st.write("")
+            salvar_btn = st.form_submit_button("💾 Salvar", width="stretch")
+
+        if salvar_btn:
+            if nome_inp.strip():
+                adicionar_lancamento(data_inp.isoformat(), banco_inp, cat_inp, nome_inp, qtd_inp, val_inp, status_inp)
+                st.rerun()
+            else:
+                st.warning("Digite o nome do gasto antes de salvar.")
+
+    st.divider()
+
+    col_lista, col_resumos = st.columns([1.65, 1])
+
+    with col_lista:
+        st.markdown("### 📑 Lista de Gastos (com lixeira direta ao lado)")
+        if df_filtrado.empty:
+            st.info("Nenhum lançamento encontrado nesse filtro.")
+        else:
+            for _, r in df_filtrado.iterrows():
+                item_id = int(r["id"])
+                data_fmt = pd.to_datetime(r["data_lancamento"]).strftime("%d/%m/%Y")
+                banco_html = render_banco_html(r["banco"])
+                total_fmt = brl(float(r["total"]))
+                qtd_int = int(r["quantidade"])
+                status_str = str(r["status"])
+
+                c_info, c_val, c_st, c_del = st.columns([3.3, 1.3, 1.1, 0.55])
+                with c_info:
+                    st.markdown(
+                        f"**{r['nome']}** ({qtd_int}x) • `{data_fmt}`\n\n"
+                        f"{banco_html} &nbsp;|&nbsp; {r['categoria']}",
+                        unsafe_allow_html=True,
+                    )
+                with c_val:
+                    st.markdown(f"**{total_fmt}**")
+                with c_st:
+                    icone_st = "✅ Pago" if status_str == "Pago" else "⏳ Pendente"
+                    if st.button(icone_st, key=f"st_{item_id}", width="stretch"):
+                        alternar_status(item_id, status_str)
+                        st.rerun()
+                with c_del:
+                    if st.button("🗑️", key=f"del_{item_id}", help="Excluir este item"):
+                        excluir_lancamento(item_id)
+                        st.rerun()
+                st.markdown("<hr style='margin:6px 0; border-color: rgba(148,163,184,0.15);'/>", unsafe_allow_html=True)
+
+    with col_resumos:
+        st.markdown("### 🏦 Total por Banco")
+        if df_filtrado.empty:
+            st.info("Sem dados.")
+        else:
+            por_banco = (
+                df_filtrado.groupby("banco", as_index=False)["total"]
+                .sum()
+                .sort_values("total", ascending=False)
+            )
+            for _, rb in por_banco.iterrows():
+                b_col1, b_col2 = st.columns([2, 1.2])
+                with b_col1:
+                    st.markdown(render_banco_html(rb["banco"]), unsafe_allow_html=True)
+                with b_col2:
+                    st.markdown(f"**{brl(float(rb['total']))}**")
+
+        st.markdown("---")
+        st.markdown("### 🗂️ Resumo por Classificação")
+        if df_filtrado.empty:
+            st.info("Sem dados.")
+        else:
+            por_cat = (
+                df_filtrado.groupby("categoria", as_index=False)["total"]
+                .sum()
+                .sort_values("total", ascending=False)
+            )
+            por_cat["% Salário"] = por_cat["total"].map(
+                lambda x: f"{(x / novo_salario * 100):.1f}%" if novo_salario > 0 else "0.0%"
+            )
+            por_cat["Valor"] = por_cat["total"].map(brl)
+            st.dataframe(
+                por_cat[["categoria", "Valor", "% Salário"]].rename(columns={"categoria": "Classificação"}),
+                hide_index=True,
+                width="stretch",
+            )
+
+elif st.session_state["aba_ativa"] == "graficos":
+    st.markdown("## 📊 Painel de Gráficos")
+    st.caption("Visualização separada dos gastos por banco, classificação e evolução mensal.")
+
+    if df_all.empty:
+        st.info("Cadastre lançamentos na primeira aba para visualizar os gráficos.")
+    else:
+        anos_disp = sorted(df_all["ano"].unique().tolist(), reverse=True)
+        g1, g2, _ = st.columns([1.2, 1.5, 3])
+        ano_g = g1.selectbox("Ano", anos_disp, index=0, key="ano_graf")
+        meses_g = ["Todos os meses"] + [MESES_PT[m] for m in range(1, 13)]
+        mes_g_nome = g2.selectbox("Mês", meses_g, index=0, key="mes_graf")
+
+        df_g = df_all[df_all["ano"] == ano_g].copy()
+        if mes_g_nome != "Todos os meses":
+            df_g = df_g[df_g["mes_nome"] == mes_g_nome]
+
+        if df_g.empty:
+            st.warning("Sem lançamentos nesse período.")
+        else:
+            col_g1, col_g2 = st.columns(2)
+
+            with col_g1:
+                st.markdown("### 🏦 Total por Banco / Cartão")
+                gb = df_g.groupby("banco", as_index=False)["total"].sum().sort_values("total", ascending=True)
+                fig_banco = px.bar(
+                    gb,
+                    x="total",
+                    y="banco",
+                    orientation="h",
+                    text_auto=".2f",
+                    labels={"total": "Total (R$)", "banco": "Banco"},
+                    color_discrete_sequence=["#38BDF8"],
+                )
+                fig_banco.update_layout(
+                    paper_bgcolor="#111827",
+                    plot_bgcolor="#111827",
+                    font_color="#F8FAFC",
+                    margin=dict(l=10, r=10, t=20, b=10),
+                    height=370,
+                )
+                st.plotly_chart(fig_banco, width="stretch")
+
+            with col_g2:
+                st.markdown("### 🗂️ Distribuição por Classificação")
+                gc = df_g.groupby("categoria", as_index=False)["total"].sum()
+                fig_cat = px.pie(
+                    gc,
+                    values="total",
+                    names="categoria",
+                    hole=0.52,
+                    color_discrete_sequence=["#38BDF8", "#0EA5E9", "#0284C7", "#22D3EE", "#6366F1", "#10B981", "#F59E0B", "#EC4899"],
+                )
+                fig_cat.update_layout(
+                    paper_bgcolor="#111827",
+                    plot_bgcolor="#111827",
+                    font_color="#F8FAFC",
+                    margin=dict(l=10, r=10, t=20, b=10),
+                    height=370,
+                )
+                st.plotly_chart(fig_cat, width="stretch")
+
+            st.markdown("### 📈 Evolução de Gastos Mês a Mês no Ano")
+            df_ano = df_all[df_all["ano"] == ano_g].copy()
+            gm = df_ano.groupby(["mes", "mes_nome"], as_index=False)["total"].sum().sort_values("mes")
+            fig_mes = px.bar(
+                gm,
+                x="mes_nome",
+                y="total",
+                text_auto=".2f",
+                labels={"mes_nome": "Mês", "total": "Total Gasto (R$)"},
+                color_discrete_sequence=["#0EA5E9"],
+            )
+            fig_mes.update_layout(
+                paper_bgcolor="#111827",
+                plot_bgcolor="#111827",
+                font_color="#F8FAFC",
+                margin=dict(l=10, r=10, t=20, b=10),
+                height=340,
+            )
+            st.plotly_chart(fig_mes, width="stretch")
+
+elif st.session_state["aba_ativa"] == "historico":
+    st.markdown("## 📅 Histórico Completo por Ano, Mês e Dia")
+    st.caption("Consulte quanto você gastou em cada mês e veja a lista completa por data.")
+
+    if df_all.empty:
+        st.info("Nenhum registro salvo ainda.")
+    else:
+        anos_hist = sorted(df_all["ano"].unique().tolist(), reverse=True)
+        h1, h2, _ = st.columns([1.2, 1.8, 3])
+        ano_h = h1.selectbox("Escolha o Ano", anos_hist, index=0, key="ano_hist")
+        df_ano_h = df_all[df_all["ano"] == ano_h].copy()
+
+        st.markdown(f"### 🗓️ Resumo Mensal de {ano_h}")
+        resumo_mensal = (
+            df_ano_h.groupby(["mes", "mes_nome"], as_index=False)
+            .agg(qtd_itens=("id", "count"), total_gasto=("total", "sum"))
+            .sort_values("mes")
+        )
+        resumo_mensal["Sobra Estimada"] = resumo_mensal["total_gasto"].map(lambda g: brl(novo_salario - g))
+        resumo_mensal["Total Gasto"] = resumo_mensal["total_gasto"].map(brl)
+        st.dataframe(
+            resumo_mensal[["mes_nome", "qtd_itens", "Total Gasto", "Sobra Estimada"]].rename(
+                columns={"mes_nome": "Mês", "qtd_itens": "Qtd. Lançamentos"}
+            ),
+            hide_index=True,
+            width="stretch",
+        )
+
+        st.divider()
+
+        meses_disponiveis = ["Todos"] + [MESES_PT[m] for m in sorted(df_ano_h["mes"].unique().tolist())]
+        mes_h = h2.selectbox("Filtrar lista por Mês", meses_disponiveis, index=0)
+
+        df_lista_h = df_ano_h.copy()
+        if mes_h != "Todos":
+            df_lista_h = df_lista_h[df_lista_h["mes_nome"] == mes_h]
+
+        df_lista_h["Data"] = pd.to_datetime(df_lista_h["data_lancamento"]).dt.strftime("%d/%m/%Y")
+        df_lista_h["Total"] = df_lista_h["total"].map(brl)
+
+        st.markdown("### 🧾 Lista Detalhada por Data")
+        st.dataframe(
+            df_lista_h[["Data", "banco", "categoria", "nome", "quantidade", "Total", "status"]].rename(
+                columns={
+                    "banco": "Banco",
+                    "categoria": "Classificação",
+                    "nome": "Descrição",
+                    "quantidade": "Qtd",
+                    "status": "Status",
+                }
+            ),
+            hide_index=True,
+            width="stretch",
+        )
