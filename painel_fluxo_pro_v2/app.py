@@ -123,9 +123,13 @@ def render_banco_html(banco_nome):
         ext = os.path.splitext(caminho)[1].lower().replace(".", "")
         if ext == "jpg":
             ext = "jpeg"
-        with open(caminho, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("utf-8")
-        return f'<span class="banco-badge"><img src="data:image/{ext};base64,{b64}"/> {banco_nome}</span>'
+        try:
+            with open(caminho, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+            if b64:
+                return f'<span class="banco-badge"><img src="data:image/{ext};base64,{b64}"/> {banco_nome}</span>'
+        except OSError:
+            pass
     return f'<span class="banco-badge">{emoji} {banco_nome}</span>'
 
 
@@ -159,19 +163,6 @@ def init_db():
         """
     )
     cur.execute("INSERT OR IGNORE INTO config (id, salario) VALUES (1, 1800.0)")
-    cur.execute("SELECT COUNT(*) FROM lancamentos")
-    if cur.fetchone()[0] == 0:
-        hoje = datetime.date.today().isoformat()
-        cur.executemany(
-            """
-            INSERT INTO lancamentos (data_lancamento, banco, categoria, nome, quantidade, valor, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (hoje, "PicPay", "💳 Cartão de Crédito", "Fatura PicPay", 1, 1500.0, "Pendente"),
-                (hoje, "Dinheiro / Pix", "🍔 Alimentação", "Alimentação e lanches", 1, 150.0, "Pago"),
-            ],
-        )
     c.commit()
     c.close()
 
@@ -243,6 +234,18 @@ def excluir_lancamento(item_id):
     c = get_conn()
     cur = c.cursor()
     cur.execute("DELETE FROM lancamentos WHERE id = ?", (int(item_id),))
+    c.commit()
+    c.close()
+
+
+def excluir_varios_lancamentos(ids_lista):
+    if not ids_lista:
+        return
+    ids_limpos = [int(x) for x in ids_lista]
+    placeholders = ",".join("?" for _ in ids_limpos)
+    c = get_conn()
+    cur = c.cursor()
+    cur.execute(f"DELETE FROM lancamentos WHERE id IN ({placeholders})", ids_limpos)
     c.commit()
     c.close()
 
@@ -345,7 +348,15 @@ if st.session_state["aba_ativa"] == "lancamentos":
     col_lista, col_resumos = st.columns([1.65, 1])
 
     with col_lista:
-        st.markdown("### 📑 Lista de Gastos (com lixeira direta ao lado)")
+        cab_esq, cab_dir = st.columns([2.2, 1.2])
+        with cab_esq:
+            st.markdown("### 📑 Lista de Gastos (com lixeira direta ao lado)")
+        with cab_dir:
+            if not df_filtrado.empty:
+                if st.button("🗑️ Excluir tudo do filtro", key="del_tudo_filtro", width="stretch"):
+                    excluir_varios_lancamentos(df_filtrado["id"].tolist())
+                    st.rerun()
+
         if df_filtrado.empty:
             st.info("Nenhum lançamento encontrado nesse filtro.")
         else:
