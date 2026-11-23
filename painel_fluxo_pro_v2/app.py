@@ -56,6 +56,8 @@ MESES_PT = {
     12: "Dezembro",
 }
 
+MES_NOME_PARA_NUM = {nome: num for num, nome in MESES_PT.items()}
+
 st.markdown(
     """
     <style>
@@ -296,11 +298,17 @@ hoje = datetime.date.today()
 if st.session_state["aba_ativa"] == "lancamentos":
     st.markdown("## 📋 Lançamentos, Cartões e Classificações")
 
-    anos_disp = sorted(list(set(df_all["ano"].tolist() + [hoje.year])), reverse=True)
+    anos_disp = sorted(list(set(df_all["ano"].tolist() + [hoje.year, hoje.year + 1])), reverse=True)
     f1, f2, _ = st.columns([1.2, 1.5, 3])
     ano_sel = f1.selectbox("Ano", anos_disp, index=0)
     mes_opcoes = ["Todos os meses"] + [MESES_PT[m] for m in range(1, 13)]
-    mes_sel_nome = f2.selectbox("Mês", mes_opcoes, index=hoje.month)
+    mes_sel_nome = f2.selectbox("Mês de referência", mes_opcoes, index=hoje.month)
+
+    mes_num_filtro = MES_NOME_PARA_NUM.get(mes_sel_nome, hoje.month)
+    if mes_num_filtro == 12:
+        data_padrao_form = datetime.date(ano_sel, 12, hoje.day if hoje.day <= 31 else 1)
+    else:
+        data_padrao_form = datetime.date(ano_sel, mes_num_filtro, min(hoje.day, 28))
 
     df_filtrado = df_all[df_all["ano"] == ano_sel].copy()
     if mes_sel_nome != "Todos os meses":
@@ -320,9 +328,10 @@ if st.session_state["aba_ativa"] == "lancamentos":
     st.divider()
 
     st.markdown("### ➕ Novo Lançamento")
+    st.caption("Dica: para fatura de cartão que só fecha/cai no mês seguinte, escolha a data de vencimento/competência no campo Data (ex.: em dezembro).")
     with st.form("form_novo", clear_on_submit=True):
         c1, c2, c3, c4 = st.columns([1.3, 1.5, 1.7, 2.2])
-        data_inp = c1.date_input("Data", value=hoje, format="DD/MM/YYYY")
+        data_inp = c1.date_input("Data (mês do gasto/fatura)", value=data_padrao_form, format="DD/MM/YYYY")
         banco_inp = c2.selectbox("Banco / Carteira", list(BANCOS_INFO.keys()), format_func=lambda k: f"{BANCOS_INFO[k]['emoji']} {k}")
         cat_inp = c3.selectbox("Classificação", CATEGORIAS)
         nome_inp = c4.text_input("Nome do gasto", placeholder="Digite o nome...")
