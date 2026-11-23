@@ -13,8 +13,9 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-DB_FILE = "fluxo_pro.db"
-ICON_DIR = "icones"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BASE_DIR, "fluxo_pro.db")
+ICON_DIR = os.path.join(BASE_DIR, "icones")
 
 BANCOS_INFO = {
     "PicPay": {"emoji": "🟢", "arquivo": "picpay"},
@@ -105,11 +106,13 @@ st.markdown(
 
 def buscar_caminho_icone(banco_nome):
     info = BANCOS_INFO.get(banco_nome, {"arquivo": "outro"})
-    base = info["arquivo"]
-    for ext in [".png", ".jpg", ".jpeg", ".webp"]:
-        caminho = os.path.join(ICON_DIR, base + ext)
-        if os.path.exists(caminho):
-            return caminho
+    base = info["arquivo"].lower()
+    if not os.path.isdir(ICON_DIR):
+        return None
+    for nome_arq in os.listdir(ICON_DIR):
+        nome_sem_ext, ext = os.path.splitext(nome_arq)
+        if nome_sem_ext.lower() == base and ext.lower() in [".png", ".jpg", ".jpeg", ".webp"]:
+            return os.path.join(ICON_DIR, nome_arq)
     return None
 
 
