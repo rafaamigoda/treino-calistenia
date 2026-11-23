@@ -152,6 +152,18 @@ def init_db():
     )
     cur.execute(
         """
+        CREATE TABLE IF NOT EXISTS renda_mensal (
+            ano INTEGER NOT NULL,
+            mes INTEGER NOT NULL,
+            meu_salario REAL NOT NULL DEFAULT 1800.0,
+            usar_mulher INTEGER NOT NULL DEFAULT 0,
+            salario_mulher REAL NOT NULL DEFAULT 0.0,
+            PRIMARY KEY (ano, mes)
+        )
+        """
+    )
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS lancamentos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             data_lancamento TEXT NOT NULL,
@@ -169,7 +181,7 @@ def init_db():
     c.close()
 
 
-def get_salario():
+def get_salario_base():
     c = get_conn()
     cur = c.cursor()
     cur.execute("SELECT salario FROM config WHERE id = 1")
@@ -178,12 +190,57 @@ def get_salario():
     return float(row[0]) if row else 1800.0
 
 
-def set_salario(valor):
+def set_salario_base(valor):
     c = get_conn()
     cur = c.cursor()
     cur.execute("UPDATE config SET salario = ? WHERE id = 1", (float(valor),))
     c.commit()
     c.close()
+
+
+def get_renda_mes(ano, mes):
+    salario_padrao = get_salario_base()
+    c = get_conn()
+    cur = c.cursor()
+    cur.execute("SELECT meu_salario, usar_mulher, salario_mulher FROM renda_mensal WHERE ano = ? AND mes = ?", (int(ano), int(mes)))
+    row = cur.fetchone()
+    c.close()
+    if row:
+        return {
+            "meu_salario": float(row[0]),
+            "usar_mulher": bool(row[1]),
+            "salario_mulher": float(row[2]),
+        }
+    return {
+        "meu_salario": salario_padrao,
+        "usar_mulher": False,
+        "salario_mulher": 0.0,
+    }
+
+
+def salvar_renda_mes(ano, mes, meu_salario, usar_mulher, salario_mulher):
+    c = get_conn()
+    cur = c.cursor()
+    cur.execute(
+        """
+        INSERT INTO renda_mensal (ano, mes, meu_salario, usar_mulher, salario_mulher)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(ano, mes) DO UPDATE SET
+            meu_salario = excluded.meu_salario,
+            usar_mulher = excluded.usar_mulher,
+            salario_mulher = excluded.salario_mulher
+        """,
+        (int(ano), int(mes), float(meu_salario), 1 if usar_mulher else 0, float(salario_mulher)),
+    )
+    c.commit()
+    c.close()
+
+
+def calcular_renda_total_mes(ano, mes):
+    renda = get_renda_mes(ano, mes)
+    meu = renda["meu_salario"]
+    mulher = renda["salario_mulher"] if renda["usar_mulher"] else 0.0
+    return meu + mulher, meu, mulher, renda["usar_mulher"]
 
 
 def carregar_lancamentos():
@@ -257,23 +314,26 @@ def brl(v):
 
 
 init_db()
+df_all = carregar_lancamentos()
+hoje = datetime.date.today()
 
 if "aba_ativa" not in st.session_state:
     st.session_state["aba_ativa"] = "lancamentos"
 
 with st.sidebar:
     st.markdown("## 💠 Controle Pro")
-    st.caption("Salário líquido (VT já descontado)")
-    salario_atual = get_salario()
-    novo_salario = st.number_input(
-        "Salário líquido mensal (R$)",
+    st.caption("Salário padrão (VT já descontado)")
+    salario_base_atual = get_salario_base()
+    novo_salario_base = st.number_input(
+        "Meu salário padrão (R$)",
         min_value=0.0,
         step=50.0,
-        value=salario_atual,
+        value=salario_base_atual,
         format="%.2f",
+        key="cfg_salario_base",
     )
-    if novo_salario != salario_atual:
-        set_salario(novo_salario)
+    if novo_salario_base != salario_base_atual:
+        set_salario_base(novo_salario_base)
         st.rerun()
 
     st.markdown("---")
@@ -292,9 +352,6 @@ with st.sidebar:
     st.caption(f"🖼️ Ícones na pasta `icones/`: {icones_detectados} encontrados")
     st.caption("💾 Salvamento automático em `fluxo_pro.db`")
 
-df_all = carregar_lancamentos()
-hoje = datetime.date.today()
-
 if st.session_state["aba_ativa"] == "lancamentos":
     st.markdown("## 📋 Lançamentos, Cartões e Classificações")
 
@@ -310,17 +367,65 @@ if st.session_state["aba_ativa"] == "lancamentos":
     else:
         data_padrao_form = datetime.date(ano_sel, mes_num_filtro, min(hoje.day, 28))
 
+    st.markdown(f"### 💰 Renda do Mês — {MESES_PT.get(mes_num_filtro, mes_sel_nome)}/{ano_sel}")
+    if mes_sel_nome == "Todos os meses":
+        renda_total_mes = sum(calcular_renda_total_mes(ano_sel, m)[0] for m in range(1, 13))
+        st.caption("Somatório da renda configurada para cada mês do ano selecionado.")
+    else:
+        renda_atual_mes = get_renda_mes(ano_sel, mes_num_filtro)
+        r_col1, r_col2, r_col3 = st.columns([1.5, 1.6, 1.5])
+        with r_col1:
+            meu_sal_mes = st.number_input(
+                f"Meu salário em {MESES_PT[mes_num_filtro]} (R$)",
+                min_value=0.0,
+                step=50.0,
+                value=float(renda_atual_mes["meu_salario"]),
+                format="%.2f",
+                key=f"meu_sal_{ano_sel}_{mes_num_filtro}",
+            )
+        with r_col2:
+            st.write("")
+            usar_mulher_mes = st.checkbox(
+                "Somar salário da minha mulher nesse mês?",
+                value=bool(renda_atual_mes["usar_mulher"]),
+                key=f"chk_mulher_{ano_sel}_{mes_num_filtro}",
+            )
+        with r_col3:
+            sal_mulher_mes = st.number_input(
+                "Salário da mulher nesse mês (R$)",
+                min_value=0.0,
+                step=50.0,
+                value=float(renda_atual_mes["salario_mulher"]),
+                format="%.2f",
+                disabled=not usar_mulher_mes,
+                key=f"sal_mulher_{ano_sel}_{mes_num_filtro}",
+            )
+
+        if (
+            float(meu_sal_mes) != float(renda_atual_mes["meu_salario"])
+            or bool(usar_mulher_mes) != bool(renda_atual_mes["usar_mulher"])
+            or float(sal_mulher_mes) != float(renda_atual_mes["salario_mulher"])
+        ):
+            salvar_renda_mes(ano_sel, mes_num_filtro, meu_sal_mes, usar_mulher_mes, sal_mulher_mes)
+            st.rerun()
+
+        renda_total_mes = float(meu_sal_mes) + (float(sal_mulher_mes) if usar_mulher_mes else 0.0)
+        if usar_mulher_mes:
+            st.caption(f"Renda conjunta salva só para {MESES_PT[mes_num_filtro]}/{ano_sel}: {brl(float(meu_sal_mes))} + {brl(float(sal_mulher_mes))} = **{brl(renda_total_mes)}**")
+        else:
+            st.caption(f"Renda salva só para {MESES_PT[mes_num_filtro]}/{ano_sel}: **{brl(renda_total_mes)}** (apenas seu salário)")
+
     df_filtrado = df_all[df_all["ano"] == ano_sel].copy()
     if mes_sel_nome != "Todos os meses":
         df_filtrado = df_filtrado[df_filtrado["mes_nome"] == mes_sel_nome]
 
     total_gastos = float(df_filtrado["total"].sum()) if not df_filtrado.empty else 0.0
     total_cartoes = float(df_filtrado[df_filtrado["categoria"] == "💳 Cartão de Crédito"]["total"].sum()) if not df_filtrado.empty else 0.0
-    sobra = novo_salario - total_gastos
-    pct_sobra = (sobra / novo_salario * 100) if novo_salario > 0 else 0.0
+    sobra = renda_total_mes - total_gastos
+    pct_sobra = (sobra / renda_total_mes * 100) if renda_total_mes > 0 else 0.0
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Salário Líquido", brl(novo_salario))
+    m1.metric("Renda do Período", brl(renda_total_mes))
     m2.metric("Gastos no Período", brl(total_gastos))
     m3.metric("Dívida em Cartões", brl(total_cartoes))
     m4.metric("Sobra Livre", f"{brl(sobra)} ({pct_sobra:.1f}%)")
@@ -424,12 +529,12 @@ if st.session_state["aba_ativa"] == "lancamentos":
                 .sum()
                 .sort_values("total", ascending=False)
             )
-            por_cat["% Salário"] = por_cat["total"].map(
-                lambda x: f"{(x / novo_salario * 100):.1f}%" if novo_salario > 0 else "0.0%"
+            por_cat["% Renda"] = por_cat["total"].map(
+                lambda x: f"{(x / renda_total_mes * 100):.1f}%" if renda_total_mes > 0 else "0.0%"
             )
             por_cat["Valor"] = por_cat["total"].map(brl)
             st.dataframe(
-                por_cat[["categoria", "Valor", "% Salário"]].rename(columns={"categoria": "Classificação"}),
+                por_cat[["categoria", "Valor", "% Renda"]].rename(columns={"categoria": "Classificação"}),
                 hide_index=True,
                 width="stretch",
             )
@@ -534,10 +639,16 @@ elif st.session_state["aba_ativa"] == "historico":
             .agg(qtd_itens=("id", "count"), total_gasto=("total", "sum"))
             .sort_values("mes")
         )
-        resumo_mensal["Sobra Estimada"] = resumo_mensal["total_gasto"].map(lambda g: brl(novo_salario - g))
+        def _sobra_mes(row):
+            renda_m = calcular_renda_total_mes(ano_h, int(row["mes"]))[0]
+            return brl(renda_m - float(row["total_gasto"]))
+        def _renda_mes_fmt(row):
+            return brl(calcular_renda_total_mes(ano_h, int(row["mes"]))[0])
+        resumo_mensal["Renda do Mês"] = resumo_mensal.apply(_renda_mes_fmt, axis=1)
+        resumo_mensal["Sobra Estimada"] = resumo_mensal.apply(_sobra_mes, axis=1)
         resumo_mensal["Total Gasto"] = resumo_mensal["total_gasto"].map(brl)
         st.dataframe(
-            resumo_mensal[["mes_nome", "qtd_itens", "Total Gasto", "Sobra Estimada"]].rename(
+            resumo_mensal[["mes_nome", "Renda do Mês", "qtd_itens", "Total Gasto", "Sobra Estimada"]].rename(
                 columns={"mes_nome": "Mês", "qtd_itens": "Qtd. Lançamentos"}
             ),
             hide_index=True,
